@@ -7,6 +7,7 @@ This file guides AI coding agents working in this repository.
 - Root skill directory: `skills/`
 - Current published skill: `skills/aala-review/`
 - Primary skill definition file: `skills/aala-review/SKILL.md`
+- Current version: `1.1.0`
 
 ## Skill Packaging Rules
 
@@ -15,6 +16,15 @@ This file guides AI coding agents working in this repository.
 3. Keep `SKILL.md` focused and reference supporting files for details.
 4. Use framework overlay files instead of duplicating framework rules in base language files.
 5. Keep skill metadata up to date in `SKILL.md` frontmatter.
+
+## Review Modes
+
+The skill supports four review modes (defined in `SKILL.md`):
+
+1. **Full codebase** — audit an entire project or folder
+2. **Changeset** — review staged/unstaged/recent changes before push
+3. **Incoming** — review what a remote branch brings after merge
+4. **PR / Branch compare** — compare two branches using `git fetch`
 
 ## Current Code Review Structure
 

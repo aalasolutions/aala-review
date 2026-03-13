@@ -8,7 +8,7 @@ This repository currently ships one skill:
 
 ## Coverage Matrix
 
-### v1.0 Scope (Shipped)
+### v1.1 (Current)
 
 Base languages:
 
@@ -31,13 +31,26 @@ Framework overlays:
 - NextJS
 - React/Vite
 
-### v1.1 Roadmap
+### Roadmap
 
 Planned framework overlays:
 
 - Angular
 - Vue
 - Django
+
+## Review Modes
+
+The skill supports four review modes:
+
+| Mode | Command | What it reviews |
+|------|---------|-----------------|
+| **Full codebase** | `review src/` or `review this codebase` | Every reviewable file in a folder or project |
+| **Changeset** | `review my changes` or `review the diff` | Staged, unstaged, and recent commit changes |
+| **Incoming** | `review incoming changes` | What a remote branch will bring after merge |
+| **PR / Branch compare** | `review this PR` or `compare main...feature/auth` | Diff between two branches using `git fetch` |
+
+In diff-based modes, the skill reads full files for context but focuses findings on changed lines. New violations in the diff are always the highest priority.
 
 ## Installation
 
@@ -77,6 +90,10 @@ Examples:
 - `Review this file for security and architecture issues`
 - `Audit these changed files`
 - `Code review this folder`
+- `Review my changes before I push`
+- `Review this PR`
+- `Review incoming changes from origin/main`
+- `Compare main and feature/auth branches`
 
 ## Skill Structure
 

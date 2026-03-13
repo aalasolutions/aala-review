@@ -153,3 +153,4 @@ async model() {
 - [ ] Template logic extracted to component getters
 - [ ] Ember Data `store` used for API calls
 - [ ] No N+1 in route `model()` hooks
+- [ ] Services injected via `@service` decorator (not manual lookup)

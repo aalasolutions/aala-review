@@ -128,6 +128,58 @@ const config = useMemo(() => ({ timeout: 5000 }), []);
 <Component config={config} />
 ```
 
+---
+
+## Error Handling and Loading States
+
+### Error Boundaries (App Router)
+
+```typescript
+// GOOD: error.tsx at route segment level
+// app/dashboard/error.tsx
+'use client';
+
+export default function DashboardError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  return (
+    <div>
+      <h2>Something went wrong</h2>
+      <button onClick={() => reset()}>Try again</button>
+    </div>
+  );
+}
+```
+
+Flag any `app/` route segment that handles user data but has no `error.tsx` file: **IMPORTANT**.
+Flag a project using the App Router with no `error.tsx` at the root `app/` level: **IMPORTANT**.
+
+### Loading States
+
+```typescript
+// GOOD: loading.tsx for async server components
+// app/dashboard/loading.tsx
+export default function DashboardLoading() {
+  return <Skeleton />;
+}
+```
+
+Flag async server components with heavy data fetching and no corresponding `loading.tsx`: **NIT**.
+
+### Not Found
+
+```typescript
+// GOOD: not-found.tsx for custom 404 pages
+// app/not-found.tsx
+export default function NotFound() {
+  return <h1>Page not found</h1>;
+}
+```
+
 ## NextJS Checklist
 
 - [ ] Route files stay thin, business logic in services
@@ -138,3 +190,6 @@ const config = useMemo(() => ({ timeout: 5000 }), []);
 - [ ] No unsafe HTML without sanitization
 - [ ] Large components split into smaller units
 - [ ] Hooks use stable dependencies
+- [ ] `error.tsx` at root `app/` level (App Router)
+- [ ] Route segments with data fetching have `loading.tsx`
+- [ ] Custom `not-found.tsx` for user-facing 404

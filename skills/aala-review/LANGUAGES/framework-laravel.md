@@ -67,6 +67,22 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
 
 Flag non-public routes missing auth middleware. Flag admin routes missing role or permission checks.
 
+### Rate Limiting on Auth Routes
+
+```php
+// BLOCKING: login endpoint without rate limiting
+Route::post('/login', [AuthController::class, 'login']);
+
+// GOOD: throttle login and registration
+Route::middleware('throttle:5,1')->group(function () {
+    Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/password/reset', [AuthController::class, 'resetPassword']);
+});
+```
+
+Flag auth endpoints (`login`, `register`, `password/reset`, `verify`) without throttle middleware: **BLOCKING**.
+
 ## Mass Assignment
 
 ```php
@@ -131,9 +147,10 @@ $posts = Post::with('user')->get();
 - [ ] Request validation on every mutating endpoint
 - [ ] authorize or gate checks for resource mutation
 - [ ] auth middleware on non-public routes
-- [ ] throttle on auth-sensitive routes
+- [ ] throttle on auth-sensitive routes (login, register, reset)
 - [ ] fillable or guarded configured on models
 - [ ] no request all mass assignment
 - [ ] env only in config files
 - [ ] no raw exception details returned to clients
 - [ ] eager loading to avoid N+1
+- [ ] token comparisons use hash_equals (from PHP base guide)
