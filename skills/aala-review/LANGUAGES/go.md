@@ -140,6 +140,49 @@ logger.Error("create user failed", "err", err)
 http.Error(w, "internal server error", http.StatusInternalServerError)
 ```
 
+### Input Validation
+
+```go
+// BLOCKING: trusting raw query parameter
+func handler(w http.ResponseWriter, r *http.Request) {
+    id := r.URL.Query().Get("id")
+    row := db.QueryRow("SELECT * FROM users WHERE id = $1", id)
+    // id is passed safely to SQL, but never validated as integer
+}
+
+// GOOD: validate input type and range before use
+func handler(w http.ResponseWriter, r *http.Request) {
+    idStr := r.URL.Query().Get("id")
+    id, err := strconv.ParseInt(idStr, 10, 64)
+    if err != nil || id <= 0 {
+        http.Error(w, "invalid id", http.StatusBadRequest)
+        return
+    }
+    row := db.QueryRow("SELECT * FROM users WHERE id = $1", id)
+}
+
+// GOOD: struct validation for JSON request bodies
+type CreateUserRequest struct {
+    Email    string `json:"email" validate:"required,email"`
+    Password string `json:"password" validate:"required,min=8,max=100"`
+}
+
+func createUser(w http.ResponseWriter, r *http.Request) {
+    var req CreateUserRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "invalid JSON", http.StatusBadRequest)
+        return
+    }
+    if err := validate.Struct(req); err != nil {
+        http.Error(w, "validation failed", http.StatusBadRequest)
+        return
+    }
+    // proceed with validated data
+}
+```
+
+Flag any HTTP handler that reads `r.Body`, query params, or path params without validation.
+
 ---
 
 ## Logging
@@ -156,6 +199,62 @@ logger.Info("login attempt", "email", email, "ip", ip)
 
 ---
 
+## Graceful Shutdown
+
+```go
+// IMPORTANT: server with no graceful shutdown drops in-flight requests
+func main() {
+    srv := &http.Server{Addr: ":8080", Handler: mux}
+    log.Fatal(srv.ListenAndServe())
+}
+
+// GOOD: graceful shutdown on signal
+func main() {
+    srv := &http.Server{Addr: ":8080", Handler: mux}
+
+    go func() {
+        if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+            log.Fatal("listen:", err)
+        }
+    }()
+
+    quit := make(chan os.Signal, 1)
+    signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+    <-quit
+
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    if err := srv.Shutdown(ctx); err != nil {
+        log.Fatal("forced shutdown:", err)
+    }
+}
+```
+
+Flag any `http.Server` in `main()` that does not handle OS signals for graceful shutdown.
+
+---
+
+## Supply Chain
+
+```text
+# IMPORTANT: unpinned dependency in go.mod
+require (
+    github.com/lib/pq v0.0.0-20210101000000-abcdef123456 // pseudo-version, pin to release
+)
+
+# GOOD: pinned to tagged release
+require (
+    github.com/lib/pq v1.10.9
+)
+```
+
+Rules:
+- All dependencies should reference tagged releases, not pseudo-versions, unless a specific commit is required and documented.
+- `go.sum` must be committed alongside `go.mod`.
+- Flag any `replace` directive pointing to a local filesystem path in committed code.
+
+---
+
 ## Review Checklist
 
 - [ ] Errors are checked and wrapped with context
@@ -166,3 +265,6 @@ logger.Info("login attempt", "email", email, "ip", ip)
 - [ ] No shell command construction with user input
 - [ ] File paths sanitized before use
 - [ ] Sensitive data excluded from logs
+- [ ] HTTP handlers validate all input (params, body, query)
+- [ ] Graceful shutdown implemented for long-running servers
+- [ ] go.sum committed, dependencies pinned to tagged releases

@@ -122,6 +122,72 @@ Rules:
 
 ---
 
+## Logging
+
+Never log sensitive fields: `password`, `token`, `api_key`, `secret`, `authorization`, `cookie`, `credit_card`, `ssn`, `otp`.
+
+```python
+# BLOCKING
+logger.info("User login: email=%s, password=%s", email, password)
+logger.debug("Token: %s", token)
+logger.info("DB URL: %s", database_url)  # may contain password
+
+# GOOD
+logger.info("Login attempt", extra={"email": email, "ip": ip})
+logger.error("DB connection failed", extra={"host": db_host})
+```
+
+Use structured logging where possible. Prefer `logging` module over bare `print()` in production code.
+
+```python
+# IMPORTANT: print in production code
+print(f"Processing order {order_id}")
+
+# GOOD: use logging module
+import logging
+logger = logging.getLogger(__name__)
+logger.info("Processing order %s", order_id)
+```
+
+Flag `print()` used for operational logging in non-CLI, non-script production code.
+
+---
+
+## Docstrings
+
+```python
+# IMPORTANT: public function without docstring
+def calculate_discount(price: float, tier: str) -> float:
+    if tier == "gold":
+        return price * 0.8
+    return price * 0.95
+
+# GOOD: docstring on public functions
+def calculate_discount(price: float, tier: str) -> float:
+    """Apply tier-based discount to the given price.
+
+    Args:
+        price: Original price before discount.
+        tier: Customer tier ("gold", "silver", "standard").
+
+    Returns:
+        Discounted price.
+
+    Raises:
+        ValueError: If tier is not recognized.
+    """
+    if tier == "gold":
+        return price * 0.8
+    return price * 0.95
+```
+
+Rules:
+- Public functions and classes should have docstrings.
+- Use a consistent docstring style across the project (Google, NumPy, or Sphinx).
+- Private/internal helpers (`_prefixed`) do not require docstrings but benefit from them for complex logic.
+
+---
+
 ## Code Structure
 
 - Flag functions over 40 lines that mix multiple responsibilities.
@@ -212,3 +278,5 @@ httpx==0.27.0
 - [ ] Shared mutable state is synchronized
 - [ ] Resources use context managers
 - [ ] Dependencies pinned
+- [ ] Production code uses `logging` module, not `print()`
+- [ ] Public functions and classes have docstrings

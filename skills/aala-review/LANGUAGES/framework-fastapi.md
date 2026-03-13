@@ -122,6 +122,37 @@ async def login(request: Request, credentials: LoginDto):
 
 Flag public auth endpoints without throttling.
 
+---
+
+## CORS Configuration
+
+```python
+# BLOCKING: allow all origins
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],         # allows any website to call your API
+    allow_credentials=True,       # combined with * origins, this is dangerous
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# GOOD: explicit allowed origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://app.example.com", "https://staging.example.com"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
+)
+```
+
+Flag:
+- `allow_origins=["*"]` combined with `allow_credentials=True`: **BLOCKING** (browsers will block this, but it signals misconfiguration).
+- `allow_origins=["*"]` on any non-public API: **IMPORTANT**.
+- Missing CORS middleware when the API is consumed by a browser frontend: **IMPORTANT**.
+
 ## FastAPI Checklist
 
 - [ ] Pydantic models on request bodies
@@ -131,3 +162,5 @@ Flag public auth endpoints without throttling.
 - [ ] WebSockets authenticate before accept
 - [ ] Uploads validate type, size, and path
 - [ ] Auth endpoints are rate-limited
+- [ ] CORS origins explicitly listed (no wildcard on non-public APIs)
+- [ ] CORS credentials not combined with wildcard origins
