@@ -3,13 +3,16 @@ name: aala-review
 description: |
   Automated code review. Checks naming conventions, DRY violations, single responsibility,
   separation of concerns, security vulnerabilities, and code quality against AALA standards.
-  Use when reviewing a file, folder, or changed files across any project.
+  Supports full-codebase reviews, changeset reviews, incoming-change reviews, and PR branch
+  comparisons. Use when reviewing a file, folder, changeset, or pull request.
   Triggers: "review this code", "code review", "/aala-review", "review [file/folder]",
-  "check this file", "audit this", "what's wrong with this"
+  "check this file", "audit this", "what's wrong with this", "review my changes",
+  "review this PR", "review incoming changes", "review the diff", "review this branch",
+  "compare branches", "what changed", "pre-push review"
 metadata:
   author: aalasolutions
-  version: "1.0.0"
-  argument-hint: <file-or-folder>
+  version: "1.1.0"
+  argument-hint: <file-or-folder-or-branch>
 allowed-tools:
   - Read
   - Grep
@@ -19,21 +22,33 @@ allowed-tools:
 
 # Code Review
 
-Automated, systematic review against AALA coding standards. Works on files, folders, or git changes.
+Automated, systematic review against AALA coding standards.
+
+Supports four review modes:
+
+| Mode | When to use | Default trigger |
+|------|-------------|-----------------|
+| **Full codebase** | Audit an entire project or folder | `review src/` or `review this codebase` |
+| **Changeset** | Review staged or recent changes before push | `review my changes` or `review the diff` |
+| **Incoming** | Review what a remote branch brings | `review incoming changes` |
+| **PR / Branch compare** | Compare two branches for pull-request review | `review this PR` or `compare branches` |
 
 ## Parameters
 
 | Parameter | Default | Example |
 |-----------|---------|---------|
 | Target | Changed files (git diff HEAD~1) | `src/users/user.service.ts`, `api/`, `components/` |
+| Mode | Auto-detected from target | `full`, `changeset`, `incoming`, `pr` |
+| Base branch | Current branch | `main`, `develop`, `origin/main` |
+| Head branch | Current HEAD | `feature/auth`, `origin/feature/auth` |
 
 ## Workflow
 
 ```
-1. Scope statement     State what will be reviewed and which base and framework guides will be loaded
+1. Scope statement     State what will be reviewed, the review mode, and which guides will be loaded
 2. Load guides         Read base language guide, then framework overlays if detected
-3. Determine scope     File, folder, or git diff
-4. Discover files      Find all reviewable source files
+3. Determine scope     Detect review mode → resolve file list from target, diff, or branch comparison
+4. Discover files      Find all reviewable source files matching the resolved scope
 5. Open report file    Create .claude/plans/review-YYYY-MM-DD-HH-MM.md before reviewing anything
 6. Review              Read each file fully, write findings directly to the report file as found
 7. Chat summary        Print severity counts and must-fix list to chat after the file is complete
@@ -81,23 +96,99 @@ Use base and overlay files only.
 
 ---
 
-### Step 2: Determine Scope
+### Step 2: Determine Scope and Review Mode
 
-If the user provided a specific file or folder, use that.
+Detect the review mode from the user prompt and target. If the mode is ambiguous, ask the user.
 
-If no target was provided, run:
+#### Mode 1: Full Codebase
+
+Triggered by a folder path, `review this codebase`, or an explicit `full` mode.
+
+Review every reviewable file under the target directory (or project root if no target).
+
+#### Mode 2: Changeset (pre-push / pre-commit)
+
+Triggered by `review my changes`, `review the diff`, `pre-push review`, or when no target is provided.
+
+Collect changed files:
 
 ```bash
-git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only --cached 2>/dev/null
+# Staged changes (about to be committed)
+git diff --name-only --cached 2>/dev/null
+
+# Unstaged changes in working tree
+git diff --name-only 2>/dev/null
+
+# Last commit (already committed but not pushed)
+git diff --name-only HEAD~1 HEAD 2>/dev/null
 ```
 
-Review all changed files. If the output is empty, ask the user what to review.
+Combine all three lists, deduplicate, and review each file. When reviewing a changeset, read the full file for context but **focus findings on the changed lines**. Run `git diff --unified=5` (or `git diff --cached --unified=5`) to identify exactly which lines changed, and prioritize review of those regions.
+
+If all three commands return empty, ask the user what to review.
+
+#### Mode 3: Incoming Changes
+
+Triggered by `review incoming changes`, `review what's coming`, or `review origin/main`.
+
+Fetch and compare against the remote tracking branch:
+
+```bash
+git fetch origin 2>/dev/null
+
+# Compare current branch with its upstream
+UPSTREAM=$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)
+
+# If upstream exists, diff against it
+git diff --name-only HEAD..."${UPSTREAM}" 2>/dev/null
+```
+
+If upstream is not set, ask the user for the remote branch name and run:
+
+```bash
+git fetch origin {BRANCH} 2>/dev/null
+git diff --name-only HEAD...origin/{BRANCH} 2>/dev/null
+```
+
+Review the incoming files. Focus findings on lines that will change after merge.
+
+#### Mode 4: PR / Branch Compare
+
+Triggered by `review this PR`, `compare branches`, `review feature/X against main`, or when two branch names are provided.
+
+Fetch both branches and compare:
+
+```bash
+git fetch origin {BASE_BRANCH} {HEAD_BRANCH} 2>/dev/null
+
+# Three-dot diff: changes HEAD_BRANCH introduces relative to BASE_BRANCH
+git diff --name-only origin/{BASE_BRANCH}...origin/{HEAD_BRANCH} 2>/dev/null
+```
+
+If reviewing a local branch against a remote base:
+
+```bash
+git fetch origin {BASE_BRANCH} 2>/dev/null
+git diff --name-only origin/{BASE_BRANCH}...HEAD 2>/dev/null
+```
+
+Review all files that differ between the two branches. Read each full file for context, but **prioritize findings on the diff regions**. Use the detailed diff to identify changed lines:
+
+```bash
+git diff --unified=5 origin/{BASE_BRANCH}...origin/{HEAD_BRANCH} -- {FILE}
+```
+
+#### Diff-Context Review Rule
+
+In changeset, incoming, and PR modes: read the entire file to understand context, but weight your review toward the changed lines. A security vulnerability in an unchanged line is still a finding, but new violations introduced by the diff are **always BLOCKING or IMPORTANT**. Existing issues in unchanged code should be flagged at their normal severity.
+
+Include the review mode in the report header (see Step 5).
 
 ---
 
 ### Step 3: Discover Files
 
-If the target is a folder, list all reviewable files:
+In **full codebase** mode, if the target is a folder, list all reviewable files:
 
 ```bash
 find {TARGET} \( -name "*.py" -o -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.go" -o -name "*.rs" -o -name "*.php" -o -name "*.html" -o -name "*.scss" -o -name "*.css" \) \
@@ -106,7 +197,16 @@ find {TARGET} \( -name "*.py" -o -name "*.ts" -o -name "*.tsx" -o -name "*.js" -
   -not -path "*/vendor/*" \
   -not -path "*/.venv/*" \
   -not -path "*/dist/*" \
-  -not -path "*/.next/*"
+  -not -path "*/.next/*" \
+  -not -path "*/target/*" \
+  -not -path "*/.git/*"
+```
+
+In **changeset**, **incoming**, or **PR** modes, the file list comes from the git diff commands in Step 2. Filter that list to only include reviewable file extensions (same list above). Exclude deleted files:
+
+```bash
+# For changeset mode, exclude deleted files
+git diff --name-only --diff-filter=d HEAD~1 HEAD 2>/dev/null
 ```
 
 Also include `Dockerfile` and `docker-compose*.yml` files in the target.
@@ -246,6 +346,11 @@ Run through every item for each file:
 **Dependencies**
 - Check if `package.json` or `requirements.txt` is in scope. If so, flag unpinned versions (`*`, `latest`, `^` without upper bound).
 
+**Environment Files**
+- Flag `.env` files committed to version control. Run `git ls-files .env .env.local .env.production 2>/dev/null` to check.
+- `.env.example` or `.env.template` are acceptable if they contain only placeholder values (no real secrets).
+- Flag any `.env` file containing real tokens, passwords, or API keys: **BLOCKING**.
+
 ---
 
 #### Check F: Language-Specific
@@ -284,6 +389,27 @@ Applied to `Dockerfile` and `docker-compose*.yml` files:
 
 ---
 
+#### Check K: Test Coverage Awareness
+
+When reviewing a source file, check whether a corresponding test file exists. Use the project's test naming convention:
+
+```bash
+# Common test file patterns
+find . -name "*_test.go" -o -name "*.test.ts" -o -name "*.spec.ts" -o -name "*.test.js" -o -name "*.spec.js" -o -name "test_*.py" -o -name "*_test.py" -o -name "*Test.php" 2>/dev/null | head -20
+```
+
+Flag:
+- Source files with business logic or security-sensitive code that have no corresponding test file: **IMPORTANT**.
+- Public API endpoints with no integration or request test: **IMPORTANT**.
+- Complex branching logic (3+ conditions) with no unit test: **NIT**.
+- Test files that exist but only test the happy path (no error/edge cases): **NIT**.
+
+Do NOT flag missing tests for: config files, type definitions, interfaces, migration files, or simple re-exports.
+
+This check is informational. It does not block merge, but highlights risk areas.
+
+---
+
 ### Step 5: Create the Report File
 
 Before reading any code, create the report file:
@@ -297,8 +423,10 @@ Use the actual current date and time in the filename. Create the `.claude/plans/
 ```markdown
 # Code Review - YYYY-MM-DD HH:MM
 
+**Mode:** [Full codebase | Changeset | Incoming | PR: base...head]
 **Scope:** [what is being reviewed]
 **Language guides loaded:** [list]
+**Framework overlays loaded:** [list or "none"]
 
 ---
 ```
@@ -378,6 +506,8 @@ The chat message contains counts and the blockers list only. Every finding with 
 - If uncertain whether something is a real issue, say so explicitly. Do not flag false positives with confidence.
 - Read code line by line. Do not skim.
 - Match the language rules to the file: Python rules for `.py`, TypeScript rules for `.ts`. Do not cross-apply.
+- In diff-based modes (changeset, incoming, PR), read the full file for context but focus findings on changed lines. New violations introduced by the diff are always the highest priority.
+- When reviewing a PR, consider cross-file impact: does a change in one file break assumptions in another changed file?
 
 **NEVER leave things out "for brevity".** This is a complete code review. If a file has 12 issues, report all 12. Do not summarize, truncate, or say "and similar issues exist elsewhere". Every finding gets its own entry with full file path, line number, current code, and fix. Partial reviews are worthless to the developer reading the report.
 
