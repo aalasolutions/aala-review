@@ -28,8 +28,8 @@ Supports four review modes:
 
 | Mode | When to use | Default trigger |
 |------|-------------|-----------------|
+| **Changeset** (default) | Review staged or recent changes before push | `review my changes` or `review the diff` |
 | **Full codebase** | Audit an entire project or folder | `review src/` or `review this codebase` |
-| **Changeset** | Review staged or recent changes before push | `review my changes` or `review the diff` |
 | **Incoming** | Review what a remote branch brings | `review incoming changes` |
 | **PR / Branch compare** | Compare two branches for pull-request review | `review this PR` or `compare branches` |
 
@@ -38,7 +38,7 @@ Supports four review modes:
 | Parameter | Default | Example |
 |-----------|---------|---------|
 | Target | Changed files (git diff HEAD~1) | `src/users/user.service.ts`, `api/`, `components/` |
-| Mode | Auto-detected from target | `full`, `changeset`, `incoming`, `pr` |
+| Mode | `changeset` (auto-detected from target) | `full`, `changeset`, `incoming`, `pr` |
 | Base branch | Current branch | `main`, `develop` |
 | Head branch | Current HEAD | `feature/auth` |
 
@@ -100,15 +100,9 @@ Use base and overlay files only.
 
 Detect the review mode from the user prompt and target. If the mode is ambiguous, ask the user.
 
-#### Mode 1: Full Codebase
+#### Mode 1: Changeset (default, pre-push / pre-commit)
 
-Triggered by a folder path, `review this codebase`, or an explicit `full` mode.
-
-Review every reviewable file under the target directory (or project root if no target).
-
-#### Mode 2: Changeset (pre-push / pre-commit)
-
-Triggered by `review my changes`, `review the diff`, `pre-push review`, or when no target is provided.
+Triggered by `review my changes`, `review the diff`, `pre-push review`, or when no target is provided. This is the default mode when no explicit target or mode is specified.
 
 Collect changed files:
 
@@ -131,6 +125,12 @@ fi
 Combine all lists, deduplicate, and review each file. When reviewing a changeset, read the full file for context but **focus findings on the changed lines**. Run `git diff --unified=5` (or `git diff --cached --unified=5`) to identify exactly which lines changed, and prioritize review of those regions.
 
 If all commands return empty, ask the user what to review.
+
+#### Mode 2: Full Codebase
+
+Triggered by a folder path, `review this codebase`, or an explicit `full` mode.
+
+Review every reviewable file under the target directory (or project root if no target).
 
 #### Mode 3: Incoming Changes
 
@@ -437,7 +437,7 @@ Use the actual current date and time in the filename. Create the `.claude/plans/
 ```markdown
 # Code Review - YYYY-MM-DD HH:MM
 
-**Mode:** [Full codebase | Changeset | Incoming | PR: base...head]
+**Mode:** [Changeset | Full codebase | Incoming | PR: base...head]
 **Scope:** [what is being reviewed]
 **Language guides loaded:** [list]
 **Framework overlays loaded:** [list or "none"]
