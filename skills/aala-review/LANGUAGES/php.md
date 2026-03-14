@@ -102,6 +102,22 @@ $db = new PDO('mysql:host=localhost', 'root', 'password123');
 $db = new PDO($_ENV['DB_DSN'], $_ENV['DB_USER'], $_ENV['DB_PASSWORD']);
 ```
 
+### Timing-Safe Token Comparison
+
+```php
+// BLOCKING: regular comparison leaks timing information
+if ($token === $storedToken) {
+    // attacker can measure response time to guess token byte-by-byte
+}
+
+// GOOD: constant-time comparison for tokens, CSRF values, API keys
+if (!hash_equals($storedToken, $token)) {
+    throw new AuthenticationException('Invalid token');
+}
+```
+
+Flag any direct `===` or `==` comparison of tokens, CSRF values, API keys, or session identifiers. Use `hash_equals()` instead.
+
 ---
 
 ## Password Handling
@@ -178,6 +194,7 @@ Log::info('User login successful', ['user_id' => $user->id]);
 - [ ] No exec or shell_exec without allowlist + escapeshellarg
 - [ ] No hardcoded credentials in source
 - [ ] Passwords use password_hash and password_verify
+- [ ] Token/CSRF comparisons use hash_equals (timing-safe)
 - [ ] No raw exception message returned to clients
 - [ ] No credentials or tokens in logs
 - [ ] Dependencies pinned and composer lock committed
