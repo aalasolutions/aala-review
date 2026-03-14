@@ -45,20 +45,53 @@ Supports four review modes:
 ## Workflow
 
 ```
-1. Scope statement     State what will be reviewed, the review mode, and which guides will be loaded
-2. Load guides         Read base language guide, then framework overlays if detected
-3. Determine scope     Detect review mode, resolve file list from target, diff, or branch comparison
-4. Discover files      Find all reviewable source files matching the resolved scope
-5. Open report file    Create .claude/plans/review-YYYY-MM-DD-HH-MM.md before reviewing anything
-6. Review              Read each file fully, write findings directly to the report file as found
-7. Chat summary        Print severity counts and must-fix list to chat after the file is complete
+1. User confirmation   Ask the user which review mode and output format before starting
+2. Scope statement     State what will be reviewed, the review mode, and which guides will be loaded
+3. Load guides         Read base language guide, then framework overlays if detected
+4. Determine scope     Resolve file list from target, diff, or branch comparison
+5. Discover files      Find all reviewable source files matching the resolved scope
+6. Open report file    Create report file (if user chose file output) before reviewing anything
+7. Review              Read each file fully, write findings to report file or chat as configured
+8. Chat summary        Print severity counts and must-fix list to chat after review is complete
 ```
 
-**The report file is created first (Step 5), before any code is read.** Every finding is written to the file as it is discovered. The chat message at the end is a count summary only - it never contains the findings themselves.
+**Do not start reviewing code until Step 1 is answered.** If the user chose file output, the report file is created first (Step 6), before any code is read. Every finding is written to the file as it is discovered. The chat message at the end is a count summary only.
 
 ---
 
-### Step 1: Detect Language and Framework, Then Load Guides
+### Step 1: User Confirmation
+
+Before doing any work, ask the user two questions. Wait for answers before proceeding.
+
+**Question 1: Review mode**
+
+Present the four modes and ask the user to pick one:
+
+```
+Which review mode?
+1. Changeset (staged/unstaged/recent changes)
+2. Full codebase (audit entire project or folder)
+3. Incoming (what a remote branch brings after merge)
+4. PR / Branch compare (diff between two branches)
+```
+
+If the user picks 3 or 4, also ask for the branch name(s).
+
+**Question 2: Output format**
+
+```
+Save findings to a report file?
+  Yes: .claude/plans/review-YYYY-MM-DD-HH-MM.md (you can change this filename)
+  No:  output findings to chat only
+```
+
+Show the sample filename with the current date and time filled in. If the user says yes, use the filename they confirm (or the default). If they provide a custom filename, use that instead.
+
+Store both answers and proceed to Step 2.
+
+---
+
+### Step 2: Detect Language and Framework, Then Load Guides
 
 Identify the primary language(s) in scope, then read the corresponding base guide from `./LANGUAGES/` before touching any code.
 
@@ -96,9 +129,9 @@ Use base and overlay files only.
 
 ---
 
-### Step 2: Determine Scope and Review Mode
+### Step 3: Determine Scope and Review Mode
 
-Detect the review mode from the user prompt and target. If the mode is ambiguous, ask the user.
+Use the mode selected by the user in Step 1. If the user provided a target path, use that as the scope.
 
 #### Mode 1: Changeset (default, pre-push / pre-commit)
 
@@ -191,11 +224,11 @@ git diff --unified=5 "origin/${BASE}...origin/${HEAD_BR}" -- {FILE}
 
 In changeset, incoming, and PR modes: read the entire file to understand context, but weight your review toward the changed lines. A security vulnerability in an unchanged line is still a finding, but new violations introduced by the diff are **always BLOCKING or IMPORTANT**. Existing issues in unchanged code should be flagged at their normal severity.
 
-Include the review mode in the report header (see Step 5).
+Include the review mode in the report header (see Step 6).
 
 ---
 
-### Step 3: Discover Files
+### Step 4: Discover Files
 
 In **full codebase** mode, if the target is a folder, list all reviewable files:
 
@@ -226,9 +259,9 @@ Print the file list to chat before starting so the scope is visible.
 
 ---
 
-### Steps 4 (Checks Reference)
+### Steps 5 (Checks Reference)
 
-These checks are applied during Step 6 (Review). One file at a time. Write each finding to the report file immediately as it is found.
+These checks are applied during Step 7 (Review). One file at a time. Write each finding to the report file (or chat, if no file output) immediately as it is found.
 
 #### Check A: Naming and Readability
 
@@ -424,15 +457,15 @@ This check verifies test file existence only. It does not review test file conte
 
 ---
 
-### Step 5: Create the Report File
+### Step 6: Create the Report File (if file output)
 
-Before reading any code, create the report file:
+If the user chose file output in Step 1, create the report file before reading any code. Use the filename the user confirmed (or the default):
 
 ```
 {project-root}/.claude/plans/review-YYYY-MM-DD-HH-MM.md
 ```
 
-Use the actual current date and time in the filename. Create the `.claude/plans/` directory if it does not exist. Write a header:
+Create the `.claude/plans/` directory if it does not exist. Write a header:
 
 ```markdown
 # Code Review - YYYY-MM-DD HH:MM
@@ -447,28 +480,39 @@ Use the actual current date and time in the filename. Create the `.claude/plans/
 
 The file is now open. Every finding goes into this file, one at a time, as it is discovered. Do not accumulate findings in memory and write them at the end. Write each finding to the file the moment it is found.
 
+If the user chose **chat only** output, skip this step. Findings will be written directly to chat during Step 7 in the same format.
+
 ---
 
-### Step 6: Review Each File, Write to File
+### Step 7: Review Each File
 
-For each file in scope: read it fully, apply every check. Write each finding to the report file in this format:
+For each file in scope: read it fully, apply every check. Write each finding to the report file (or chat, if no file output) in this format:
 
 ```markdown
 ## [SEVERITY] Short descriptive title
 
-**File:** `path/to/file.php` line N
+**File:** `path/to/file.php:N-M`
 **Rule:** [check name] / [specific rule from language guide]
 
-**Issue:** [What is wrong and why it matters.]
+**Issue:** [Objective statement of what violates which rule. No opinions, no "consider", no "you might want to". State the fact and the rule it breaks.]
 
-**Current code:**
-[code block]
+**Current code (lines N-M):**
+```lang
+N  | const password = "admin123";
+N+1| db.connect(password);
+```
 
 **Fix:**
-[code block]
+```lang
+N  | const password = process.env.DB_PASSWORD;
+N+1| if (!password) throw new Error("DB_PASSWORD not set");
+N+2| db.connect(password);
+```
 
 ---
 ```
+
+Line numbers are required in both the file reference and the code blocks. Use the `N | code` format to show exact line numbers from the source file. This applies to both file output and chat output.
 
 **Severity levels:**
 
@@ -479,13 +523,13 @@ For each file in scope: read it fully, apply every check. Write each finding to 
 | `[NIT]` | Style, minor inconsistency, optional improvement. |
 | `[PRAISE]` | Something done well. Include at least one per file if warranted. |
 
-**The report file is the review.** If a finding is not in the file, it does not exist. The chat is never the source of truth.
+**If file output was chosen, the report file is the review.** If a finding is not in the file, it does not exist. The chat summary is counts only. If chat-only output was chosen, all findings go directly to chat in the same format.
 
 ---
 
-### Step 7: Chat Summary
+### Step 8: Chat Summary
 
-After all files are reviewed and the report file is complete, post this summary to chat:
+After all files are reviewed, post this summary to chat. If file output was chosen, include the file path:
 
 ```
 ## Review Summary
@@ -514,6 +558,7 @@ The chat message contains counts and the blockers list only. Every finding with 
 
 ## Guidance
 
+- **Be objective.** Every finding must state a fact, not an opinion. "This function is too complex" is an opinion. "This function is 68 lines with 7 branches, violating the 40-line / single-responsibility rule (Check B)" is a fact. No "consider", "you might want to", "it would be nice if". State what the code does, which rule it violates, and what the fix is.
 - Load the language guide first. Every finding needs a rule behind it.
 - Be specific. "Bad naming" is not a finding. "`x` on line 47 should be `requestCount`" is a finding.
 - Show the fix. Not just what is wrong.
