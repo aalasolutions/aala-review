@@ -154,6 +154,55 @@ const secret = this.config.get<string>('JWT_SECRET');
 if (!secret) throw new Error('JWT_SECRET not configured');
 ```
 
+---
+
+## Rate Limiting
+
+```typescript
+// BLOCKING: no rate limiting on auth endpoints
+@Post('login')
+async login(@Body() dto: LoginDto) {
+  return this.authService.login(dto);
+}
+
+// GOOD: use ThrottlerGuard
+import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
+
+@UseGuards(ThrottlerGuard)
+@Throttle({ default: { limit: 5, ttl: 60000 } })
+@Post('login')
+async login(@Body() dto: LoginDto) {
+  return this.authService.login(dto);
+}
+```
+
+Enable `ThrottlerModule` in `app.module.ts`:
+
+```typescript
+ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+```
+
+Flag auth endpoints without throttle guards: **BLOCKING**.
+
+---
+
+## CORS Configuration
+
+```typescript
+// BLOCKING: allow all origins
+const app = await NestFactory.create(AppModule);
+app.enableCors();  // defaults to allow all origins
+
+// GOOD: explicit origin list
+app.enableCors({
+  origin: ['https://app.example.com', 'https://staging.example.com'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true,
+});
+```
+
+Flag `app.enableCors()` with no arguments or `origin: '*'` on non-public APIs: **IMPORTANT**.
+
 ## NestJS Checklist
 
 - [ ] Controllers delegate to services, not repositories
@@ -164,3 +213,5 @@ if (!secret) throw new Error('JWT_SECRET not configured');
 - [ ] No interpolated raw SQL
 - [ ] No N+1 data access in loops
 - [ ] Secrets loaded from config/env
+- [ ] ThrottlerModule configured, auth endpoints throttled
+- [ ] CORS origins explicitly listed (no wildcard on non-public APIs)
