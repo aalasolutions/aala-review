@@ -12,7 +12,7 @@ description: |
 license: MIT
 metadata:
   author: aalasolutions
-  version: "1.1.0"
+  version: "1.1.1"
   argument-hint: <file-or-folder-or-branch>
 compatibility: "claude-code, cursor, codex, windsurf, continue, github-copilot, gemini-cli, roo, cline, goose, amp, openclaw, command-code, junie, opencode, qoder, zencoder"
 allowed-tools:
