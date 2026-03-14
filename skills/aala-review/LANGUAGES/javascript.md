@@ -244,6 +244,30 @@ function scheduleReconnect() {
 
 ---
 
+## Module System
+
+```javascript
+// IMPORTANT: mixing require and import in the same file
+const fs = require('fs');
+import path from 'path';
+
+// GOOD: use one module system consistently
+// ESM (preferred for new code)
+import fs from 'fs';
+import path from 'path';
+
+// CommonJS (existing Node.js projects)
+const fs = require('fs');
+const path = require('path');
+```
+
+Rules:
+- Use ESM (`import`/`export`) for new projects. Set `"type": "module"` in `package.json`.
+- Do not mix `require()` and `import` in the same file unless using dynamic `import()` for conditional loading.
+- Flag `require()` in files that also use `import` statements: **IMPORTANT**.
+
+---
+
 ## Error Handling
 
 ```javascript
@@ -345,6 +369,7 @@ willDestroy() {
 - [ ] No callback-style mixed with async/await
 - [ ] No prototype pollution risk in merge functions
 - [ ] Optional chaining (`?.`) used for nullable chains
+- [ ] Consistent module system (no mixing require and import)
 
 ### WebSocket (Client)
 - [ ] Authentication sent after connection open
