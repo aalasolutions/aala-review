@@ -14,11 +14,7 @@ metadata:
   author: aalasolutions
   version: "1.1.0"
   argument-hint: <file-or-folder-or-branch>
-compatibility:
-  - claude
-  - codex
-  - cursor
-  - continue
+compatibility: "claude-code, cursor, codex, windsurf, continue, github-copilot, gemini-cli, roo, cline, goose, amp, openclaw, command-code, junie, opencode, qoder, zencoder"
 allowed-tools:
   - Read
   - Grep
