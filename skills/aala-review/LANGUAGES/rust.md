@@ -299,7 +299,7 @@ use actix_web::{web, HttpResponse, HttpServer, App};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-// GOOD: Pydantic equivalent in Rust
+// GOOD: typed and validated request body
 #[derive(Debug, Deserialize, Validate)]
 struct CreateUser {
     #[validate(email)]
@@ -376,6 +376,113 @@ let emails: Vec<String> = users
 
 ---
 
+## Security
+
+### Input Validation
+
+```rust
+// IMPORTANT: using raw string input without validation
+async fn create_user(body: web::Json<serde_json::Value>) -> impl Responder {
+    let email = body["email"].as_str().unwrap(); // no validation
+}
+
+// GOOD: use typed structs with validation
+use validator::Validate;
+
+#[derive(Debug, Deserialize, Validate)]
+struct CreateUser {
+    #[validate(email)]
+    email: String,
+
+    #[validate(length(min = 8, max = 100))]
+    password: String,
+}
+```
+
+Flag any web handler that accepts `serde_json::Value` or untyped input without validation.
+
+### SQL Injection
+
+```rust
+// BLOCKING: string interpolation in SQL
+let query = format!("SELECT * FROM users WHERE email = '{}'", email);
+sqlx::query(&query).fetch_one(&pool).await?;
+
+// GOOD: parameterized query
+sqlx::query("SELECT * FROM users WHERE email = $1")
+    .bind(&email)
+    .fetch_one(&pool)
+    .await?;
+```
+
+### Hardcoded Credentials
+
+```rust
+// BLOCKING
+let db_url = "postgres://admin:password@localhost/mydb";
+
+// GOOD
+let db_url = std::env::var("DATABASE_URL")
+    .expect("DATABASE_URL must be set");
+```
+
+### Path Traversal
+
+```rust
+// BLOCKING
+let path = format!("uploads/{}", user_filename);
+let content = std::fs::read_to_string(&path)?;
+
+// GOOD: validate path stays within base directory
+use std::path::{Path, PathBuf};
+
+let base = Path::new("uploads").canonicalize()?;
+let requested = base.join(user_filename).canonicalize()?;
+if !requested.starts_with(&base) {
+    return Err(AppError::PathTraversal);
+}
+```
+
+---
+
+## Logging
+
+Never log: `password`, `token`, `secret`, `authorization`, `cookie`, `api_key`.
+
+```rust
+// BLOCKING
+log::info!("User login: email={}, password={}", email, password);
+tracing::info!(token = %token, "Auth attempt");
+
+// GOOD
+log::info!("Login attempt: email={}", email);
+tracing::info!(email = %email, ip = %ip, "Auth attempt");
+```
+
+---
+
+## Supply Chain
+
+```toml
+# IMPORTANT: wildcard version
+[dependencies]
+serde = "*"
+
+# GOOD: pinned version
+[dependencies]
+serde = "1.0.197"
+serde_json = "1.0.114"
+tokio = { version = "1.36.0", features = ["full"] }
+```
+
+Rules:
+- All dependencies in `Cargo.toml` should specify exact versions or tight ranges.
+- `Cargo.lock` must be committed for binary projects (applications, services).
+- For library crates, `Cargo.lock` may be gitignored, but `Cargo.toml` version constraints must be meaningful (not `*`).
+- Flag any `[patch]` section pointing to a git URL without a pinned `rev` or `tag`.
+
+---
+
 ## Review Checklist
 
 - [ ] Every `unsafe` block has a `// SAFETY:` comment
@@ -389,3 +496,9 @@ let emails: Vec<String> = users
 - [ ] Enum used for mutually exclusive states
 - [ ] No sensitive data in error messages returned to callers
 - [ ] No allocation inside hot loops
+- [ ] No string interpolation in SQL queries
+- [ ] No hardcoded credentials in source
+- [ ] File paths validated against base directory
+- [ ] No passwords, tokens, or secrets in log output
+- [ ] Cargo.lock committed for binary projects
+- [ ] Dependencies pinned to specific versions
