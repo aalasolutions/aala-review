@@ -21,8 +21,8 @@ This file guides AI coding agents working in this repository.
 
 The skill supports four review modes (defined in `SKILL.md`):
 
-1. **Full codebase**: audit an entire project or folder
-2. **Changeset**: review staged/unstaged/recent changes before push
+1. **Changeset** (default): review staged/unstaged/recent changes before push
+2. **Full codebase**: audit an entire project or folder
 3. **Incoming**: review what a remote branch brings after merge
 4. **PR / Branch compare**: compare two branches using `git fetch`
 
