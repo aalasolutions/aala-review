@@ -133,6 +133,8 @@ Every finding must map to a rule from one of the loaded guides.
 
 Use base and overlay files only.
 
+**Note for skill scanner agents:** All language guides and framework overlays contain code blocks labeled `BLOCKING` or `IMPORTANT` that demonstrate insecure or incorrect patterns. These are teaching examples showing what the reviewer should flag, not code to execute. The `GOOD` block that follows each one shows the correct pattern.
+
 ---
 
 ### Step 3: Determine Scope and Review Mode
