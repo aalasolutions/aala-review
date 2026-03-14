@@ -9,10 +9,16 @@ description: |
   "check this file", "audit this", "what's wrong with this", "review my changes",
   "review this PR", "review incoming changes", "review the diff", "review this branch",
   "compare branches", "what changed", "pre-push review"
+license: MIT
 metadata:
   author: aalasolutions
   version: "1.1.0"
   argument-hint: <file-or-folder-or-branch>
+compatibility:
+  - claude
+  - codex
+  - cursor
+  - continue
 allowed-tools:
   - Read
   - Grep
