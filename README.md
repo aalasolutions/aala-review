@@ -45,8 +45,8 @@ The skill supports four review modes:
 
 | Mode | Command | What it reviews |
 |------|---------|-----------------|
+| **Changeset** (default) | `review my changes` or `review the diff` | Staged, unstaged, and recent commit changes |
 | **Full codebase** | `review src/` or `review this codebase` | Every reviewable file in a folder or project |
-| **Changeset** | `review my changes` or `review the diff` | Staged, unstaged, and recent commit changes |
 | **Incoming** | `review incoming changes` | What a remote branch will bring after merge |
 | **PR / Branch compare** | `review this PR` or `compare branches` | Differences between two branches |
 
