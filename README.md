@@ -8,7 +8,7 @@ This repository currently ships one skill:
 
 ## Coverage Matrix
 
-### v1.1 (Current)
+### v1.2 (Current)
 
 Base languages:
 
@@ -82,6 +82,8 @@ Use `--target` to provide a custom path.
 ## Usage
 
 Once installed, the skill auto-activates when relevant prompts are detected.
+
+Review reports are saved to `.aala-reviews/` in the project root (e.g. `.aala-reviews/review-2026-03-22-14-30.md`). The user can also choose chat-only output.
 
 Examples:
 

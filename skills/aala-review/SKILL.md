@@ -12,7 +12,7 @@ description: |
 license: MIT
 metadata:
   author: aalasolutions
-  version: "1.1.1"
+  version: "1.2.0"
   argument-hint: <file-or-folder-or-branch>
 compatibility: "claude-code, cursor, codex, windsurf, continue, github-copilot, gemini-cli, roo, cline, goose, amp, openclaw, command-code, junie, opencode, qoder, zencoder"
 allowed-tools:
@@ -65,9 +65,21 @@ Supports four review modes:
 
 Before doing any work, ask the user two questions. Wait for answers before proceeding.
 
+**MANDATORY: Use your platform's structured question tool to present these questions.** You MUST use a tool call, not plain chat text. Every major coding agent has a question tool. Use whichever your platform provides:
+
+| Platform | Tool to use |
+|----------|------------|
+| Claude Code | `AskUserQuestion` |
+| GitHub Copilot | `vscode/askQuestions` |
+| OpenAI Codex CLI | `request_user_input` |
+| Cursor | `AskQuestion` |
+| Other agents | Use whatever structured input or question tool is available in your tool list |
+
+If your platform genuinely has no question tool (verify by checking your available tools first), present a numbered list and explicitly ask the user to reply with a number. Do not bury the question inside a paragraph of text.
+
 **Question 1: Review mode**
 
-Present the four modes and ask the user to pick one:
+Present the four modes and ask the user to pick one. Use the tool call with these options:
 
 ```
 Which review mode?
@@ -77,13 +89,15 @@ Which review mode?
 4. PR / Branch compare (diff between two branches)
 ```
 
-If the user picks 3 or 4, also ask for the branch name(s).
+If the user picks 3 or 4, ask for the branch name(s) using the same tool.
 
 **Question 2: Output format**
 
+Again, use the structured question tool:
+
 ```
 Save findings to a report file?
-  Yes: .claude/plans/review-YYYY-MM-DD-HH-MM.md (you can change this filename)
+  Yes: .aala-reviews/review-YYYY-MM-DD-HH-MM.md (you can change this filename)
   No:  output findings to chat only
 ```
 
@@ -466,10 +480,10 @@ This check verifies test file existence only. It does not review test file conte
 If the user chose file output in Step 1, create the report file before reading any code. Use the filename the user confirmed (or the default):
 
 ```
-{project-root}/.claude/plans/review-YYYY-MM-DD-HH-MM.md
+{project-root}/.aala-reviews/review-YYYY-MM-DD-HH-MM.md
 ```
 
-Create the `.claude/plans/` directory if it does not exist. Write a header:
+Create the `.aala-reviews/` directory if it does not exist. Write a header:
 
 ```markdown
 # Code Review - YYYY-MM-DD HH:MM
@@ -538,7 +552,7 @@ After all files are reviewed, post this summary to chat. If file output was chos
 ```
 ## Review Summary
 
-Full report: .claude/plans/review-YYYY-MM-DD-HH-MM.md
+Full report: .aala-reviews/review-YYYY-MM-DD-HH-MM.md
 
 Files reviewed: N
 Findings:
