@@ -255,6 +255,163 @@ Rules:
 
 ---
 
+## Algorithmic Complexity
+
+Apply `SKILL.md` **Check J (Algorithmic Complexity)** and **Check I (Performance and Resource Management)**.
+
+### Slice preallocation
+
+```go
+// IMPORTANT: append causes repeated reallocation when size is known
+var results []string
+for _, item := range items {
+    results = append(results, item.Name)
+}
+
+// GOOD: preallocate when size is known
+results := make([]string, 0, len(items))
+for _, item := range items {
+    results = append(results, item.Name)
+}
+```
+
+Flag `append` in loops where the final size is knowable (from `len()` of source collection, query result count, etc.) but no capacity is preallocated.
+
+### Map preallocation
+
+```go
+// NIT: map grows incrementally
+m := make(map[string]int)
+for _, item := range items {
+    m[item.ID] = item.Value
+}
+
+// GOOD: preallocate when size is known
+m := make(map[string]int, len(items))
+for _, item := range items {
+    m[item.ID] = item.Value
+}
+```
+
+### String building
+
+```go
+// IMPORTANT: O(n²) string concatenation
+var html string
+for _, item := range items {
+    html += fmt.Sprintf("<li>%s</li>", item.Name)
+}
+
+// GOOD: strings.Builder — amortized O(n)
+var b strings.Builder
+b.Grow(len(items) * 20) // estimate capacity
+for _, item := range items {
+    fmt.Fprintf(&b, "<li>%s</li>", item.Name)
+}
+html := b.String()
+```
+
+### Linear search to map index
+
+```go
+// BLOCKING: O(n) linear search per lookup
+for _, order := range orders {
+    for _, user := range users {  // scans entire users slice
+        if user.ID == order.UserID {
+            process(user, order)
+        }
+    }
+}
+
+// GOOD: O(1) map lookup
+userMap := make(map[string]User, len(users))
+for _, u := range users {
+    userMap[u.ID] = u
+}
+for _, order := range orders {
+    if user, ok := userMap[order.UserID]; ok {
+        process(user, order)
+    }
+}
+```
+
+### Binary search on sorted slices
+
+```go
+// IMPORTANT: linear scan on sorted slice
+func findUser(users []User, id int) (User, bool) {
+    for _, u := range users {  // O(n) on sorted data
+        if u.ID == id {
+            return u, true
+        }
+    }
+    return User{}, false
+}
+
+// GOOD: binary search — O(log n)
+func findUser(users []User, id int) (User, bool) {
+    idx := sort.Search(len(users), func(i int) bool {
+        return users[i].ID >= id
+    })
+    if idx < len(users) && users[idx].ID == id {
+        return users[idx], true
+    }
+    return User{}, false
+}
+```
+
+### Bounded goroutine pools
+
+```go
+// BLOCKING: unbounded goroutine creation
+for _, url := range urls {
+    go fetch(url)  // N goroutines, can exhaust resources
+}
+
+// GOOD: bounded worker pool
+sem := make(chan struct{}, 10) // max 10 concurrent
+var wg sync.WaitGroup
+for _, url := range urls {
+    wg.Add(1)
+    go func(u string) {
+        defer wg.Done()
+        sem <- struct{}{}
+        defer func() { <-sem }()
+        fetch(u)
+    }(url)
+}
+wg.Wait()
+```
+
+### Unbounded HTTP calls in loop
+
+```go
+// BLOCKING: N sequential HTTP calls
+for _, id := range userIDs {
+    resp, err := http.Get(fmt.Sprintf("/api/users/%s", id))  // one per iteration
+    // ...
+}
+
+// GOOD: batch endpoint if available
+resp, err := http.Get(fmt.Sprintf("/api/users?ids=%s", strings.Join(userIDs, ",")))
+
+// GOOD: bounded parallel with errgroup
+g, ctx := errgroup.WithContext(ctx)
+g.SetLimit(10)
+for _, id := range userIDs {
+    id := id
+    g.Go(func() error {
+        _, err := fetchUser(ctx, id)
+        return err
+    })
+}
+if err := g.Wait(); err != nil {
+    return err
+}
+```
+
+---
+
 ## Review Checklist
 
 - [ ] Errors are checked and wrapped with context
@@ -268,3 +425,10 @@ Rules:
 - [ ] HTTP handlers validate all input (params, body, query)
 - [ ] Graceful shutdown implemented for long-running servers
 - [ ] go.sum committed, dependencies pinned to tagged releases
+
+### Algorithmic Complexity
+- [ ] Slices preallocated with `make([]T, 0, n)` when size is known
+- [ ] Maps preallocated with `make(map[K]V, n)` when size is known
+- [ ] `strings.Builder` used for string building in loops, not `+` or `fmt.Sprintf`
+- [ ] No nested linear scans inside loops — build map index; use `sort.Search` for sorted slices
+- [ ] No I/O-in-loop or unbounded goroutines — use batch endpoints or bounded concurrency (`errgroup.SetLimit` / semaphore)

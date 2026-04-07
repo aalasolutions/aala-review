@@ -7,7 +7,7 @@ This file guides AI coding agents working in this repository.
 - Root skill directory: `skills/`
 - Current published skill: `skills/aala-review/`
 - Primary skill definition file: `skills/aala-review/SKILL.md`
-- Current version: `1.2.0`
+- Current version: `1.2.1`
 
 ## Skill Packaging Rules
 

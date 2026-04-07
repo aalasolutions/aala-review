@@ -184,6 +184,102 @@ Log::info('User login successful', ['user_id' => $user->id]);
 
 ---
 
+## Algorithmic Complexity
+
+Apply `SKILL.md` **Check J (Algorithmic Complexity)** and **Check I (Performance and Resource Management)**.
+
+Flag (severity depends on whether `n` is unbounded/user-controlled and whether this runs in a hot path):
+
+### Linear search inside loops
+
+```php
+// BLOCKING: in_array inside loop = O(n²)
+$allowed = ['admin', 'editor', 'viewer', /* ... many roles */];
+foreach ($users as $user) {
+    if (in_array($user->role, $allowed)) {  // O(n) per iteration
+        $result[] = $user;
+    }
+}
+
+// GOOD: O(1) lookup with flipped array
+$allowedMap = array_flip($allowed);
+foreach ($users as $user) {
+    if (isset($allowedMap[$user->role])) {  // O(1) per iteration
+        $result[] = $user;
+    }
+}
+```
+
+Same applies to `array_search()` called inside loops. For associative lookups, prefer `isset()` or `array_key_exists()` over `in_array()`.
+
+### String concatenation in loops
+
+```php
+// IMPORTANT: O(n²) string building with .= on large output
+$html = '';
+foreach ($items as $item) {
+    $html .= '<li>' . htmlspecialchars($item->name) . '</li>';
+}
+
+// GOOD: collect pieces, implode once
+$parts = [];
+foreach ($items as $item) {
+    $parts[] = '<li>' . htmlspecialchars($item->name) . '</li>';
+}
+$html = implode('', $parts);
+```
+
+### I/O in loops (generalized N+1)
+
+Flag DB/HTTP/filesystem I/O performed once per item.
+
+Fix patterns:
+- Add bulk endpoints / batch queries (e.g., `WHERE id IN (...)`)
+- Paginate with a hard cap
+- Use bounded concurrency when batching isn’t possible
+
+(Framework-specific eager-loading examples belong in the relevant framework overlay, e.g. Laravel.)
+
+
+### array_merge in loops
+
+```php
+// IMPORTANT: array_merge inside loop = O(n²) total copies
+$result = [];
+foreach ($batches as $batch) {
+    $result = array_merge($result, $batch);  // copies entire $result each time
+}
+
+// GOOD: spread operator or array_push
+$result = array_merge(...$batches);
+
+// GOOD: for large datasets
+$result = [];
+foreach ($batches as $batch) {
+    array_push($result, ...$batch);
+}
+```
+
+### ReDoS (Regex Denial of Service)
+
+```php
+// BLOCKING: catastrophic backtracking on crafted input
+preg_match('/^([a-zA-Z0-9])+@/', $userInput);
+
+// GOOD: linear-time pattern + length bound
+if (strlen($userInput) > 254) {
+    throw new InvalidArgumentException('Input too long');
+}
+preg_match('/^[a-zA-Z0-9]+@/', $userInput);
+
+// BETTER: use filter_var
+if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    throw new InvalidArgumentException('Invalid email');
+}
+```
+
+---
+
 ## Review Checklist
 
 - [ ] `declare(strict_types=1)` at top of every PHP file
@@ -198,3 +294,10 @@ Log::info('User login successful', ['user_id' => $user->id]);
 - [ ] No raw exception message returned to clients
 - [ ] No credentials or tokens in logs
 - [ ] Dependencies pinned and composer lock committed
+
+### Algorithmic Complexity
+- [ ] No DB/HTTP/filesystem I/O inside loops (batch/eager-load/paginate)
+- [ ] No `in_array` / `array_search` inside loops on related datasets (use associative map / `array_flip`)
+- [ ] No large string building with `.=` in loops (use `implode()`)
+- [ ] No `array_merge` inside loops (use spread operator or `array_push`)
+- [ ] Regex on user-controlled input is length-bounded and avoids nested quantifiers (ReDoS)

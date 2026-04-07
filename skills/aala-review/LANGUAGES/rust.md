@@ -347,6 +347,8 @@ async fn handler() -> impl Responder {
 
 ## Performance
 
+> See also `## Algorithmic Complexity` below for Vec preallocation, HashSet lookups, and clone-in-loop patterns.
+
 ### Avoid Allocation in Hot Loops
 
 ```rust
@@ -483,6 +485,109 @@ Rules:
 
 ---
 
+## Algorithmic Complexity
+
+Apply `SKILL.md` **Check J (Algorithmic Complexity)** and **Check I (Performance and Resource Management)**.
+
+Flag (severity depends on whether `n` is unbounded/user-controlled and whether this runs in a hot path):
+
+### Linear search vs HashSet/HashMap
+
+```rust
+// BLOCKING: Vec::contains inside loop = O(n²)
+let allowed: Vec<String> = get_allowed_ids();
+for request in requests {
+    if allowed.contains(&request.id) {  // O(n) per iteration
+        process(request);
+    }
+}
+
+// GOOD: O(1) lookup with HashSet
+use std::collections::HashSet;
+
+let allowed: HashSet<String> = get_allowed_ids().into_iter().collect();
+for request in requests {
+    if allowed.contains(&request.id) {  // O(1) per iteration
+        process(request);
+    }
+}
+```
+
+Same applies to `.iter().find()`, `.iter().position()`, and `.iter().any()` called inside loops over related datasets.
+
+### Clone in hot loops
+
+```rust
+// IMPORTANT: unnecessary clone on every iteration
+for item in &items {
+    let name = item.name.clone();  // allocates every iteration
+    process_name(name);
+}
+
+// GOOD: borrow instead of cloning
+for item in &items {
+    process_name(&item.name);  // zero allocation
+}
+
+// If process_name needs ownership, consider restructuring to take &str
+fn process_name(name: &str) { /* ... */ }
+```
+
+Review every `.clone()` inside a loop. Not all are wrong, but each must be justified. If the function can accept a reference, prefer borrowing.
+
+### Collect into intermediate Vecs unnecessarily
+
+```rust
+// IMPORTANT: allocates intermediate Vec just to iterate again
+let active: Vec<&User> = users.iter().filter(|u| u.is_active).collect();
+for user in &active {
+    send_notification(user);
+}
+
+// GOOD: chain iterators, no intermediate allocation
+users.iter()
+    .filter(|u| u.is_active)
+    .for_each(|user| send_notification(user));
+```
+
+Flag `.collect::<Vec<_>>()` when the result is only iterated once and could remain a lazy iterator chain.
+
+### String building in loops
+
+```rust
+// IMPORTANT: repeated format! + push_str allocates unnecessarily
+let mut result = String::new();
+for item in &items {
+    result += &format!("{}: {}\n", item.key, item.value);  // format! allocates a new String each time
+}
+
+// GOOD: use write! macro to write directly into the buffer
+use std::fmt::Write;
+
+let mut result = String::with_capacity(items.len() * 32);  // preallocate estimate
+for item in &items {
+    write!(result, "{}: {}\n", item.key, item.value).unwrap();
+}
+```
+
+### Vec reallocation in hot paths
+
+```rust
+// IMPORTANT: Vec grows by doubling, many small reallocations at start
+let mut results = Vec::new();
+for frame in frames {
+    results.push(process(frame));  // reallocates multiple times if frames is large
+}
+
+// GOOD: preallocate when size is known or estimable
+let mut results = Vec::with_capacity(frames.len());
+for frame in frames {
+    results.push(process(frame));
+}
+```
+
+---
+
 ## Review Checklist
 
 - [ ] Every `unsafe` block has a `// SAFETY:` comment
@@ -502,3 +607,10 @@ Rules:
 - [ ] No passwords, tokens, or secrets in log output
 - [ ] Cargo.lock committed for binary projects
 - [ ] Dependencies pinned to specific versions
+
+### Algorithmic Complexity
+- [ ] No `Vec::contains` / `.iter().find()` inside loops on related datasets — use `HashSet`/`HashMap`
+- [ ] No unnecessary `.clone()` inside hot loops — borrow where possible
+- [ ] No `.collect::<Vec<_>>()` into intermediate Vecs that are only iterated once
+- [ ] `Vec::with_capacity` used when collection size is known or estimable
+- [ ] String building in loops uses `write!` macro or preallocated `String`, not repeated `format!` + `push_str`

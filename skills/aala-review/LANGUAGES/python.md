@@ -265,6 +265,108 @@ Rules:
 
 ---
 
+## Algorithmic Complexity
+
+Apply `SKILL.md` **Check J (Algorithmic Complexity)** and **Check I (Performance and Resource Management)**.
+
+### Data structure selection
+
+```python
+# BLOCKING: O(n) prepend — list.insert(0, x) shifts all elements
+items = []
+for item in stream:
+    items.insert(0, item)  # every insert is O(n)
+
+# GOOD: O(1) append then reverse, or use deque
+from collections import deque
+items = deque()
+items.appendleft(item)  # O(1)
+```
+
+```python
+# IMPORTANT: using list for membership tests — O(n) per lookup
+allowed = ["admin", "editor", "viewer"]
+if role in allowed:  # O(n) scan every time
+    ...
+
+# GOOD: set for membership — O(1)
+allowed = {"admin", "editor", "viewer"}
+if role in allowed:  # O(1)
+    ...
+```
+
+### Generator vs list comprehension
+
+```python
+# IMPORTANT: building full list when only iteration is needed
+total = sum([x.price for x in orders])  # creates temporary list
+
+# GOOD: generator expression — constant memory
+total = sum(x.price for x in orders)
+```
+
+Flag list comprehensions used only as arguments to `sum()`, `any()`, `all()`, `min()`, `max()`, `sorted()`, or `len()` — a generator expression avoids the intermediate list.
+
+### Walrus operator for single-pass patterns
+
+```python
+# IMPORTANT: computing .strip() twice per element
+clean = [x.strip() for x in lines if x.strip()]
+
+# GOOD: compute once with walrus operator
+clean = [s for x in lines if (s := x.strip())]
+```
+
+### itertools and collections for common patterns
+
+```python
+# IMPORTANT: manual flattening when itertools.chain exists
+flat = []
+for sublist in nested:
+    for item in sublist:
+        flat.append(item)
+
+# GOOD: itertools.chain.from_iterable
+from itertools import chain
+flat = list(chain.from_iterable(nested))
+```
+
+```python
+# IMPORTANT: manual grouping when defaultdict exists
+groups = {}
+for item in items:
+    key = item.category
+    if key not in groups:
+        groups[key] = []
+    groups[key].append(item)
+
+# GOOD: collections.defaultdict
+from collections import defaultdict
+groups = defaultdict(list)
+for item in items:
+    groups[item.category].append(item)
+```
+
+### Unbounded async concurrency
+
+```python
+# BLOCKING: unbounded concurrency — can exhaust connections/memory
+results = await asyncio.gather(*[fetch(url) for url in urls])
+
+# GOOD: bounded with semaphore
+sem = asyncio.Semaphore(10)
+
+async def limited_fetch(url):
+    async with sem:
+        return await fetch(url)
+
+results = await asyncio.gather(*[limited_fetch(u) for u in urls])
+```
+
+Flag `asyncio.gather` over unbounded inputs without a semaphore or bounded worker pool.
+
+---
+
 ## Review Checklist
 
 - [ ] Function signatures have type hints
@@ -280,3 +382,10 @@ Rules:
 - [ ] Dependencies pinned
 - [ ] Production code uses `logging` module, not `print()`
 - [ ] Public functions and classes have docstrings
+
+### Algorithmic Complexity
+- [ ] No `list.insert(0, x)` in loops — use `collections.deque`
+- [ ] Membership tests use `set`/`dict` not `list` for non-trivial collections
+- [ ] Prefer generator expressions when only iteration is needed (avoid intermediate lists)
+- [ ] Prefer `itertools` / `collections` helpers for grouping and flattening
+- [ ] No unbounded `asyncio.gather` without semaphore / bounded worker pool

@@ -12,7 +12,7 @@ description: |
 license: MIT
 metadata:
   author: aalasolutions
-  version: "1.2.0"
+  version: "1.2.1"
   argument-hint: <file-or-folder-or-branch>
 compatibility: "claude-code, cursor, codex, windsurf, continue, github-copilot, gemini-cli, roo, cline, goose, amp, openclaw, command-code, junie, opencode, qoder, zencoder"
 allowed-tools:
@@ -331,41 +331,26 @@ grep -n "{PATTERN}" {FILE}
 
 #### Check J: Algorithmic Complexity
 
-Catch obvious O(n²) or worse patterns in code that processes collections or runs in hot paths.
+Catch scaling risks (time/space complexity) and algorithm/data-structure misuse. This check is language-agnostic — concrete examples live in the relevant `LANGUAGES/*.md` guide(s) and `references/performance-and-complexity.md`.
 
-```typescript
-// BLOCKING: O(n²) nested loop over same dataset
-for (const user of users) {
-  for (const order of orders) {
-    if (order.userId === user.id) { }  // should be a Map lookup
-  }
-}
+**Severity rubric (use in findings):**
+- **[BLOCKING]** if the code runs in a request hot path, input size is unbounded/user-controlled, it performs I/O in a loop (DB/HTTP/fs), or it enables a DoS vector (e.g., regex ReDoS).
+- **[IMPORTANT]** if it will scale poorly on realistic production data or batch jobs as data grows.
+- **[NIT]** only if `n` is explicitly bounded (hard caps/pagination) and not in a hot path.
 
-// GOOD: O(n) - build index first
-const ordersByUser = new Map(orders.map(o => [o.userId, o]));
-for (const user of users) {
-  const order = ordersByUser.get(user.id);
-}
-```
+If there is no explicit bound, assume input size is unbounded.
 
-```python
-# BLOCKING: O(n) list lookup inside loop = O(n²)
-for item in items:
-    if item in big_list:  # list `in` is O(n)
-        process(item)
-
-# GOOD: O(1) set lookup
-big_set = set(big_list)
-for item in items:
-    if item in big_set:
-        process(item)
-```
-
-Flag:
-- Nested loops iterating over the same or related datasets (use Map/Set/dict)
-- `Array.find()` / `list.index()` / `in list` called inside a loop
-- Database query inside a loop (N+1)
-- Sorting the same collection multiple times
+**Flag (examples are language-specific; see guides):**
+- Nested loops over related datasets (often O(n²)) → build an index first (hash map/set/dict)
+- Linear lookups inside loops (e.g., contains/find/index/in-list) → convert to set/map index once
+- Any I/O inside loops (DB/HTTP/filesystem) → batch, eager-load, paginate, bulk endpoints, or bounded concurrency
+- Repeated sorting / repeated full scans of the same collection
+- String building via repeated concatenation in loops → use a builder/join pattern
+- Recursion on overlapping subproblems without memoization; recursion on user-controlled depth without guards
+- Space blowups: loading whole datasets into memory when streaming/cursor/pagination is available
+- Regex applied to untrusted input with nested quantifiers / catastrophic backtracking (ReDoS)
+- Algorithm selection mistakes (full sort when only top-K/min/max is needed; linear scan on already-sorted/indexed data)
+- Non-obvious algorithms in hot paths with undocumented complexity (flag as **NIT**)
 
 ---
 
@@ -449,7 +434,8 @@ Applied to `Dockerfile` and `docker-compose*.yml` files:
 
 #### Check I: Performance and Resource Management
 
-- No N+1 patterns: a loop that queries the database on every iteration.
+- No N+1 / I/O-in-loop patterns: a loop that queries DB / calls HTTP / reads files once per item.
+- Avoid unbounded concurrency (e.g., `Promise.all` over unbounded input, goroutine floods).
 - Resources released after use: file handles, DB connections, HTTP clients.
 - Infinite loops must have a clear exit condition or an explicit daemon/background intent.
 

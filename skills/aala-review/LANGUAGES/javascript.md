@@ -358,6 +358,112 @@ willDestroy() {
 
 ---
 
+## Algorithmic Complexity
+
+Apply `SKILL.md` **Check J (Algorithmic Complexity)** and **Check I (Performance and Resource Management)**.
+
+Flag (severity depends on whether `n` is unbounded/user-controlled and whether this runs in a hot path):
+
+### Linear search inside loops
+
+```javascript
+// BLOCKING: Array.includes / find inside loop = O(n²)
+for (const order of orders) {
+  const user = users.find(u => u.id === order.userId);  // O(n) per iteration
+  process(user, order);
+}
+
+// GOOD: O(n) - build index first
+const userById = new Map(users.map(u => [u.id, u]));
+for (const order of orders) {
+  const user = userById.get(order.userId);  // O(1) per iteration
+  process(user, order);
+}
+```
+
+Same applies to `Array.includes()`, `Array.indexOf()`, and `Array.some()` called inside loops on the same or related datasets.
+
+### String concatenation in loops
+
+```javascript
+// IMPORTANT: O(n²) string building via +=
+let html = '';
+for (const item of items) {
+  html += `<li>${item.name}</li>`;
+}
+
+// GOOD: O(n) array join
+const html = items.map(item => `<li>${item.name}</li>`).join('');
+
+// GOOD: array push + join for complex assembly
+const parts = [];
+for (const item of items) {
+  parts.push(`<li>${item.name}</li>`);
+}
+const html = parts.join('');
+```
+
+### Multi-pass collection chains
+
+```javascript
+// NIT: three passes where one would work (only flag on large/unbounded collections)
+const result = items
+  .filter(x => x.active)
+  .map(x => x.value)
+  .filter(v => v > 10);
+
+// GOOD: single pass
+const result = [];
+for (const x of items) {
+  if (x.active && x.value > 10) result.push(x.value);
+}
+```
+
+A single `.filter().map()` on a small known-bounded list is acceptable. Flag when chaining 3+ passes or when the collection is user-controlled / unbounded.
+
+### Unbounded concurrency
+
+```javascript
+// IMPORTANT: unbounded parallel requests can overwhelm server/network
+const results = await Promise.all(
+  userIds.map(id => fetch(`/api/users/${id}`))
+);
+
+// GOOD: batch endpoint
+const results = await fetch(`/api/users?ids=${userIds.join(',')}`);
+
+// GOOD: chunked concurrency when batch endpoint unavailable
+async function fetchChunked(ids, chunkSize = 10) {
+  const results = [];
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const batch = await Promise.all(chunk.map(id => fetch(`/api/users/${id}`)));
+    results.push(...batch);
+  }
+  return results;
+}
+```
+
+### ReDoS (Regex Denial of Service)
+
+```javascript
+// BLOCKING: catastrophic backtracking on crafted input
+const regex = /^(a+)+$/;               // exponential on "aaaaaaaaaaaaaaX"
+const emailRegex = /^([a-zA-Z0-9])+@/; // nested quantifier
+
+// GOOD: linear-time pattern
+const regex = /^a+$/;
+const emailRegex = /^[a-zA-Z0-9]+@/;
+
+// BETTER: use a validation library
+import validator from 'validator';
+validator.isEmail(input);
+```
+
+Flag any regex applied to user-controlled input that contains nested quantifiers (`(a+)+`), overlapping alternations with quantifiers, or quantified groups followed by overlapping suffixes.
+
+---
+
 ## Review Checklist
 
 ### JavaScript
@@ -376,6 +482,13 @@ willDestroy() {
 - [ ] Incoming messages validated before use
 - [ ] Error and close handlers implemented
 - [ ] Reconnect with exponential backoff (not tight loop)
+
+### Algorithmic Complexity
+- [ ] No `Array.find` / `includes` / `indexOf` called inside a loop over a related dataset
+- [ ] No string concatenation via `+=` inside loops on unbounded data
+- [ ] No I/O (DB/HTTP/fs) inside loops without batching or parallelism
+- [ ] No unbounded `Promise.all` over user-controlled input
+- [ ] No regex with nested quantifiers applied to user-controlled input
 
 ### Supply Chain
 - [ ] No `*` or `latest` in package.json

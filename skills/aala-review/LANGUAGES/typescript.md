@@ -417,6 +417,101 @@ const cacheKey = `content:${lang}`;  // user-controlled key
 
 ---
 
+## Algorithmic Complexity
+
+Apply `SKILL.md` **Check J (Algorithmic Complexity)** and **Check I (Performance and Resource Management)**.
+
+Flag (severity depends on whether `n` is unbounded/user-controlled and whether this runs in a hot path):
+
+### Linear search inside loops
+
+```typescript
+// BLOCKING: Array.find inside loop = O(n²)
+for (const order of orders) {
+  const user = users.find(u => u.id === order.userId);  // O(n) per iteration
+  process(user, order);
+}
+
+// GOOD: O(n) - build typed Map index
+const userById = new Map<string, User>(users.map(u => [u.id, u]));
+for (const order of orders) {
+  const user = userById.get(order.userId);  // O(1)
+  if (user) process(user, order);
+}
+```
+
+Same applies to `Array.includes()`, `Array.indexOf()`, and `Array.some()` called inside loops on related datasets.
+
+### String concatenation in loops
+
+```typescript
+// IMPORTANT: O(n²) string building via +=
+let output = '';
+for (const row of rows) {
+  output += `${row.name}: ${row.value}\n`;
+}
+
+// GOOD: O(n) array join
+const output = rows.map(row => `${row.name}: ${row.value}`).join('\n');
+```
+
+### Unbounded concurrency
+
+```typescript
+// IMPORTANT: unbounded Promise.all can exhaust connections/memory
+const results = await Promise.all(
+  userIds.map(id => fetchUser(id))  // thousands of concurrent requests
+);
+
+// GOOD: chunked concurrency
+async function fetchChunked<T>(
+  ids: string[],
+  fetcher: (id: string) => Promise<T>,
+  chunkSize = 10
+): Promise<T[]> {
+  const results: T[] = [];
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const batch = await Promise.all(chunk.map(fetcher));
+    results.push(...batch);
+  }
+  return results;
+}
+```
+
+### Sequential I/O in loops
+
+```typescript
+// BLOCKING: N sequential awaits in loop
+for (const id of userIds) {
+  const user = await userService.findById(id);  // one query per iteration
+  results.push(user);
+}
+
+// GOOD: batch query
+const users = await userService.findByIds(userIds);
+
+// GOOD: parallel with bounded concurrency (see above)
+```
+
+### ReDoS (Regex Denial of Service)
+
+```typescript
+// BLOCKING: catastrophic backtracking
+const regex = /^([a-zA-Z0-9])+@[a-zA-Z0-9]+\.[a-z]+$/;
+
+// GOOD: linear-time pattern
+const regex = /^[a-zA-Z0-9]+@[a-zA-Z0-9]+\.[a-z]+$/;
+
+// BETTER: validation library
+import validator from 'validator';
+validator.isEmail(input);
+```
+
+Flag regex with nested quantifiers applied to user-controlled input.
+
+---
+
 ## Review Checklist
 
 ### TypeScript
@@ -430,6 +525,13 @@ const cacheKey = `content:${lang}`;  // user-controlled key
 - [ ] Message payload validated (type + size)
 - [ ] Authorization checked per action
 - [ ] Rate limiting configured
+
+### Algorithmic Complexity
+- [ ] No `find` / `includes` / `indexOf` inside loops over related datasets — build `Map`/`Set` index
+- [ ] No large string building via `+=` inside loops on unbounded data — use array fragments + `join('')`
+- [ ] No unbounded `Promise.all` over user-controlled input — cap concurrency / chunk work
+- [ ] No I/O-in-loop (DB/HTTP/fs) without batching/pagination
+- [ ] Regex on user input avoids nested quantifiers or is length-bounded (ReDoS)
 
 ### File Upload
 - [ ] File type detected from magic bytes, not Content-Type header
